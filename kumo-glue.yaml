@@ -1,0 +1,97 @@
+---
+Description: "AWS Glue Job"
+Parameters:
+  Environment:
+    Description: Application Environment
+    Type: String
+    AllowedValues:
+      - DEV
+      - STG
+      - PRD
+      - TEST
+
+Resources:
+  GlueJobRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:ListBucket"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Sub "arn:aws:s3:::glue-scripts-${Environment}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::glue-scripts-${Environment}-${AWS::Region}/*"
+                  - !Sub "arn:aws:s3:::raw-reports-${Environment}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::raw-reports-${Environment}-${AWS::Region}/*"
+                  - !Sub "arn:aws:s3:::parquet-reports-${Environment}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::parquet-reports-${Environment}-${AWS::Region}/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Path: "/"
+
+  ReportGlueJobAWS:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub "csv-to-parquet-${Environment}-${AWS::Region}"
+      Role: !Ref GlueJobRole
+      GlueVersion: 2.0
+      Command:
+        Name: glueetl
+        PythonVersion: 3
+        ScriptLocation: !Sub "s3://glue-scripts-${Environment}-${AWS::Region}/reporting/csv-to-parquet.py"
+      DefaultArguments:
+        "--job-bookmark-option": "job-bookmark-disable"
+      ExecutionProperty:
+        MaxConcurrentRuns: 50
+      MaxRetries: 0
+      AllocatedCapacity: 5
+
+  ReportGlueJobAzure:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub "csv-to-parquet-azure-${Environment}-${AWS::Region}"
+      Role: !Ref GlueJobRole
+      GlueVersion: 2.0
+      Command:
+        Name: glueetl
+        PythonVersion: 3
+        ScriptLocation: !Sub "s3://glue-scripts-${Environment}-${AWS::Region}/reporting/csv-to-parquet-azure.py"
+      DefaultArguments:
+        "--job-bookmark-option": "job-bookmark-disable"
+      ExecutionProperty:
+        MaxConcurrentRuns: 50
+      MaxRetries: 0
+      AllocatedCapacity: 5
+
+  ReportGlueJobAzure1:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub "csv-to-parquet-azure1-${Environment}-${AWS::Region}"
+      Role: !Ref GlueJobRole
+      GlueVersion: 2.0
+      Command:
+        Name: glueetl
+        PythonVersion: 3
+        ScriptLocation: !Sub "s3://glue-scripts-${Environment}-${AWS::Region}/reporting/csv-to-parquet-azure2.py"
+      DefaultArguments:
+        "--job-bookmark-option": "job-bookmark-disable"
+      ExecutionProperty:
+        MaxConcurrentRuns: 50
+      MaxRetries: 0
+      AllocatedCapacity: 5

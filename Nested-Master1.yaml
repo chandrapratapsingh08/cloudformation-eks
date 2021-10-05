@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Nested-Master1 create Networking, AMI Server, Access server, EFS and RDS creation.
+
+Parameters:
+
+  Environment:
+    Description: Application Environment
+    Type: String
+    Default: TEST
+    AllowedValues:
+      - DEV
+      - STG
+      - PRD
+      - TEST
+
+  BucketName:
+    Description: cfn template bucket name
+    Type: String
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.small
+
+  DBName:
+    Description: RDS DB name
+    Type: String
+
+  DBUser:
+    Description: Must contain 1 to 16 alphanumeric characters. First character must be a letter. Cannot be a word reserved by the database engine.
+    Type: String
+    Default: kumolus
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+
+  DBPassword:
+    Description: The password for the master database user can be any printable ASCII character except "/", """, or "@". Master password constraints differ for each database engine. Must contain 8 to 41 characters.
+    Type: String
+    Default: kumolus$2o21
+    NoEcho: 'true'
+
+  DBInstanceClass:
+    Description: The database instance type
+    Type: String
+    Default: db.t3.small
+    ConstraintDescription: must select a valid database instance type.
+
+  KeyName:
+    Type: String
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AZ1: us-east-1a
+      AZ2: us-east-1b
+      ALIAS: UE1
+      BASEAMI: ami-09e67e426f25ce0d7
+      EKSAMI: ami-0c776db1f56454d46
+    us-west-1:
+      AZ1: us-west-1b
+      AZ2: us-west-1c
+
+Resources:
+  Network:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-eks-network-new.yaml
+      Parameters:
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+        AZ1: !FindInMap [RegionMap, !Ref "AWS::Region", AZ1]
+        AZ2: !FindInMap [RegionMap, !Ref "AWS::Region", AZ2]
+
+  AMIServer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-ami-server.yaml
+      Parameters:
+        SubnetAPIPUBName: !GetAtt 'Network.Outputs.PublicSubnetID'
+        APISecurityGroupName: !GetAtt 'Network.Outputs.APISecurityGroupName'
+        REPSecurityGroupName: !GetAtt 'Network.Outputs.REPSecurityGroupName'
+        ACCSecurityGroupName: !GetAtt 'Network.Outputs.SecurityGroupID'
+        LinuxAMI: !FindInMap [RegionMap, !Ref "AWS::Region", EKSAMI]
+        KeyName: !Ref KeyName
+        InstanceType: !Ref InstanceType
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  AccessServer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-access-server.yaml
+      Parameters:
+        PublicSubnetID: !GetAtt 'Network.Outputs.PublicSubnetID'
+        SecurityGroups: !GetAtt 'Network.Outputs.SecurityGroupID'
+        LinuxAMI: !FindInMap [RegionMap, !Ref "AWS::Region", BASEAMI]
+        KeyName: !Ref KeyName
+        InstanceType: !Ref InstanceType
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  EFSAPI:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-efs-api.yaml
+      Parameters:
+        SubnetEFSAPIAZ1: !GetAtt 'Network.Outputs.APIPVTSubnetID1'
+        SubnetEFSAPIAZ2: !GetAtt 'Network.Outputs.APIPVTSubnetID2'
+        EFSAPISecurityGroup: !GetAtt 'Network.Outputs.EFSAPISecurityGroup'
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  EFSREP:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-efs-rep.yaml
+      Parameters:
+        SubnetEFSREPAZ1: !GetAtt 'Network.Outputs.REPPVTSubnetID1'
+        SubnetEFSREPAZ2: !GetAtt 'Network.Outputs.REPPVTSubnetID2'
+        EFSREPSecurityGroup: !GetAtt 'Network.Outputs.REPPVTSecurityGroup'
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  MongoServer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-mongo-server.yaml
+      Parameters:
+        PublicSubnetID: !GetAtt 'Network.Outputs.PublicSubnetIDMongo'
+        SecurityGroupID: !GetAtt 'Network.Outputs.SecurityGroupIDMongo'
+        LinuxAMI: !FindInMap [RegionMap, !Ref "AWS::Region", BASEAMI]
+        KeyName: !Ref KeyName
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  PostgresRDS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-rds.yaml
+      Parameters:
+        DBSubnetGroupName: !GetAtt 'Network.Outputs.DBSubnetGroupName'
+        RDSSecurityGroup: !GetAtt 'Network.Outputs.RDSSecurityGroup'
+        AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ1]
+        DBUser: !Ref DBUser
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+        DBName: !Ref DBName
+        DBPassword: !Ref DBPassword
+        DBInstanceClass: !Ref DBInstanceClass

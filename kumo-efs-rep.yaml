@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This cloudformation will create encryped Elastic File System.
+Parameters:
+  SystemName:
+    Type: String
+    Description: System for which this cloudformation is created.
+    Default: EFS-REP
+  Environment:
+    Type: String
+    Description: Environment for which this cloudformation is getting created
+    Default: Prod
+  SubnetEFSREPAZ1:
+    Type: String
+    Description: Private subnet in availability zone A
+  SubnetEFSREPAZ2:
+    Type: String
+    Description: Private subnet in availability zone B
+  EC2InstanceLinkedEFSFileSystemTagName:
+    Type: String
+    Description: Tag name of Elastic File System.
+    Default: elastic-file-system
+  EFSREPSecurityGroup:
+    Type: String
+    Description: Select a security group to launch into
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  Encryption:
+    Type: String
+    Default: true
+  ThroughputInMibps:
+    Type: Number
+    Default: 20
+  Throughput:
+    Type: String
+    Default: provisioned
+Resources:
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemTags:
+      - Key: Name
+        Value: !Sub EFS-${Environment}-${Region}-REP
+      - Key: Environment
+        Value: Production
+      Encrypted: !Ref Encryption
+      ProvisionedThroughputInMibps: !Ref ThroughputInMibps
+      ThroughputMode: !Ref Throughput
+  EFSMountTargetAZa:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId:
+        Ref: SubnetEFSREPAZ1
+      SecurityGroups: [ !Ref EFSREPSecurityGroup ]
+  EFSMountTargetAZb:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId:
+        Ref: SubnetEFSREPAZ2
+      SecurityGroups: [ !Ref EFSREPSecurityGroup ]
+
+Outputs:
+  EFSDNSREP:
+    Value: !Ref EFSFileSystem
+    Export:
+      Name: EFSREP-EFSDNSREP

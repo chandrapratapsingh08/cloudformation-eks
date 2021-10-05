@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-master
+  namespace: api-master
+  labels:
+    app: api-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-master
+  template:
+    metadata:
+      labels:
+        app: api-master
+    spec:
+      containers:
+      - name: api-master
+        image: kumomp/production:api-master-saas-v2.0.2
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        - containerPort: 8982
+        - containerPort: 3200

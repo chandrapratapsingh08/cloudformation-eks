@@ -1,0 +1,1325 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Kumolus Networking Infra set up include VPC for EKS and Other services, IAM, Security groups.
+
+Parameters:
+
+  VpcMONGOCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.192.0.0/26
+
+  VpcKUMOCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.191.0.0/16
+
+  VpcRIGHTSIZECIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.193.0.0/26
+
+  SubnetMONGOPVTCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.192.0.0/27
+
+  SubnetRIGHTSIZECIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.193.0.0/27
+
+  SubnetWEBPUBCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.10.0/24
+
+  SubnetWEBPUB2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.22.0/24
+
+  SubnetAPIPUBCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.191.11.0/24
+
+  SubnetAPIPUB2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.191.23.0/24
+
+  SubnetREPPUBCIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.12.0/24
+
+  SubnetREPPUB2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.24.0/24
+
+  SubnetREDAPICIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.13.0/24
+
+  SubnetREDREPCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.14.0/24
+
+  SubnetTOOLSCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.15.0/24
+
+  SubnetAPIPVTAZ1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.16.0/24
+
+  SubnetAPIPVTAZ2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.17.0/24
+
+  SubnetREPPVTAZ1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.18.0/24
+
+  SubnetREPPVTAZ2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.19.0/24
+
+  SubnetRDS1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.20.0/24
+
+  SubnetRDS2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.191.21.0/24
+
+  Environment:
+    Description: Application Environment
+    Type: String
+
+  Region:
+    Description: Application Environment Region
+    Type: String
+
+  AZ1:
+    Description: Availability Zone 1
+    Type: String
+
+  AZ2:
+    Description: Availability Zone 2
+    Type: String
+
+Resources:
+
+  VPCMONGO:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcMONGOCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub VPC-${Environment}-${Region}-MONGO
+
+  VPCRIGHTSIZE:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcRIGHTSIZECIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub VPC-${Environment}-${Region}-RIGHTSIZE
+
+  VPCKUMO:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcKUMOCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub VPC-${Environment}-${Region}-KUMO
+
+  VPCPeeringKUMOMONGO:
+    Type: 'AWS::EC2::VPCPeeringConnection'
+    Properties:
+      VpcId: !Ref VPCKUMO
+      PeerVpcId: !Ref VPCMONGO
+
+  InternetGatewayKUMO:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub IGW-${Environment}-${Region}-VPC-KUMO
+
+  InternetGatewayKUMOAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGatewayKUMO
+      VpcId: !Ref VPCKUMO
+
+  InternetGatewayRIGHTSIZE:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub IGW-${Environment}-${Region}-VPC-RSZ
+
+  InternetGatewayRIGHTSIZEAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGatewayRIGHTSIZE
+      VpcId: !Ref VPCRIGHTSIZE
+
+  SubnetMONGOPVT:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCMONGO
+      CidrBlock: !Ref SubnetMONGOPVTCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}--MON-PVT
+
+  SubnetRIGHTSIZE:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCRIGHTSIZE
+      CidrBlock: !Ref SubnetRIGHTSIZECIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}--RSZ
+
+  SubnetWEBPUB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetWEBPUBCIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ1
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-WEB-PUB
+
+  SubnetWEBPUB2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetWEBPUB2CIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ2
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-WEB-PUB2
+
+  SubnetAPIPUB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetAPIPUBCIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ1
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-API-PUB
+
+  SubnetAPIPUB2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetAPIPUB2CIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ2
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-API-PUB2
+
+  SubnetREPPUB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetREPPUBCIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ1
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-REP-PUB
+
+  SubnetREPPUB2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetREPPUB2CIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ2
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-REP-PUB2
+
+  SubnetREDAPI:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetREDAPICIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ1
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-RED-API
+
+  SubnetREDREP:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetREDREPCIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ1
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-RED-REP
+
+  SubnetTOOLS:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetTOOLSCIDR
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZ2
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-TOOLS
+
+  SubnetAPIPVTAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      AvailabilityZone: !Ref AZ1
+      CidrBlock: !Ref SubnetAPIPVTAZ1CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-EFS-API-AZ1
+
+  SubnetAPIPVTAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      AvailabilityZone: !Ref AZ2
+      CidrBlock: !Ref SubnetAPIPVTAZ2CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-EFS-API-AZ2
+
+  SubnetREPPVTAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      AvailabilityZone: !Ref AZ1
+      CidrBlock: !Ref SubnetREPPVTAZ1CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-EFS-REP-AZ1
+
+  SubnetREPPVTAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      AvailabilityZone: !Ref AZ2
+      CidrBlock: !Ref SubnetREPPVTAZ2CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-EFS-REP-AZ2
+
+  NatGateway01:
+    DependsOn:
+    - NatGatewayEIP1
+    - SubnetAPIPUB
+    - InternetGatewayKUMOAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'NatGatewayEIP1.AllocationId'
+      SubnetId: !Ref SubnetAPIPUB
+      Tags:
+      - Key: Name
+        Value: !Sub '${AWS::StackName}-NatGatewayAZ1'
+
+  NatGateway02:
+    DependsOn:
+    - NatGatewayEIP2
+    - SubnetREPPUB
+    - InternetGatewayKUMOAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'NatGatewayEIP2.AllocationId'
+      SubnetId: !Ref SubnetREPPUB
+      Tags:
+      - Key: Name
+        Value: !Sub '${AWS::StackName}-NatGatewayAZ2'
+
+  NatGatewayEIP1:
+    DependsOn:
+    - InternetGatewayKUMOAttachment
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  NatGatewayEIP2:
+    DependsOn:
+    - InternetGatewayKUMOAttachment
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  SubnetRDS1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetRDS1CIDR
+      AvailabilityZone: !Ref AZ1
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-RDS1
+
+  SubnetRDS2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCKUMO
+      CidrBlock: !Ref SubnetRDS2CIDR
+      AvailabilityZone: !Ref AZ2
+      Tags:
+        - Key: Name
+          Value: !Sub SUB-${Environment}-${Region}-RDS2
+
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Postgres RDS Subnet Group
+      DBSubnetGroupName: !Sub SUBGROUP-Kumo-${Environment}-${Region}-RDS
+      SubnetIds:
+        - Ref: SubnetRDS1
+        - Ref: SubnetRDS2
+
+  MONGOPVTRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCMONGO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-MONGO-PVT
+
+  RIGHTSIZERouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCRIGHTSIZE
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-RIGHTSIZE
+
+  WEBPUBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-WEB-PUB
+
+  APIPUBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-API-PUB
+
+  REPPUBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-REP-PUB
+
+  REDAPIRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-RED-API
+
+  REDREPRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-RED-REP
+
+  TOOLSRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-TOOLS
+
+  APIPVTRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-API-PVT
+
+  REPPVTRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-REP-PVT
+
+  RDSRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub RT-${Environment}-${Region}-RDS
+
+  MONGOPVTRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref MONGOPVTRouteTable
+      DestinationCidrBlock: !Ref VpcKUMOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  RIGHTSIZERoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayRIGHTSIZEAttachment
+    Properties:
+      RouteTableId: !Ref RIGHTSIZERouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayRIGHTSIZE
+
+  WEBPUBRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayKUMOAttachment
+    Properties:
+      RouteTableId: !Ref WEBPUBRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayKUMO
+
+  APIPUBRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayKUMOAttachment
+    Properties:
+      RouteTableId: !Ref APIPUBRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayKUMO
+
+  APIPUBRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref APIPUBRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  REPPUBRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayKUMOAttachment
+    Properties:
+      RouteTableId: !Ref REPPUBRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayKUMO
+
+  REPPUBRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref REPPUBRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  REDAPIRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref REDAPIRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  REDREPRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayKUMOAttachment
+    Properties:
+      RouteTableId: !Ref REDREPRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayKUMO
+
+  REDREPRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref REDREPRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  TOOLSRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayKUMOAttachment
+    Properties:
+      RouteTableId: !Ref TOOLSRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayKUMO
+
+  TOOLSRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref TOOLSRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  APIPVTRoute1:
+    DependsOn:
+    - InternetGatewayKUMOAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref APIPVTRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  APIPVTRoute2:
+    DependsOn:
+    - InternetGatewayKUMOAttachment
+    - NatGateway01
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref APIPVTRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway01
+
+  REPPVTRoute1:
+    DependsOn:
+    - InternetGatewayKUMOAttachment
+    - NatGateway02
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref REPPVTRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway02
+
+  REPPVTRoute2:
+    DependsOn:
+    - InternetGatewayKUMOAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref REPPVTRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  RDSRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayKUMOAttachment
+    Properties:
+      RouteTableId: !Ref RDSRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayKUMO
+
+  RDSRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RDSRouteTable
+      DestinationCidrBlock: !Ref VpcMONGOCIDR
+      VpcPeeringConnectionId: !Ref VPCPeeringKUMOMONGO
+
+  MONGOPVTRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MONGOPVTRouteTable
+      SubnetId: !Ref SubnetMONGOPVT
+
+  RIGHTSIZERouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RIGHTSIZERouteTable
+      SubnetId: !Ref SubnetRIGHTSIZE
+
+  WEBPUBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref WEBPUBRouteTable
+      SubnetId: !Ref SubnetWEBPUB
+
+  WEBPUB2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref WEBPUBRouteTable
+      SubnetId: !Ref SubnetWEBPUB2
+
+  APIPUBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref APIPUBRouteTable
+      SubnetId: !Ref SubnetAPIPUB
+
+  APIPUB2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref APIPUBRouteTable
+      SubnetId: !Ref SubnetAPIPUB2
+
+  REPPUBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref REPPUBRouteTable
+      SubnetId: !Ref SubnetREPPUB
+
+  REPPUB2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref REPPUBRouteTable
+      SubnetId: !Ref SubnetREPPUB2
+
+  REDAPIRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref REDAPIRouteTable
+      SubnetId: !Ref SubnetREDAPI
+
+  REDREPRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref REDREPRouteTable
+      SubnetId: !Ref SubnetREDREP
+
+  TOOLSRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref TOOLSRouteTable
+      SubnetId: !Ref SubnetTOOLS
+
+  APIPVTAZ1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref APIPVTRouteTable
+      SubnetId: !Ref SubnetAPIPVTAZ1
+
+  APIPVTAZ2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref APIPVTRouteTable
+      SubnetId: !Ref SubnetAPIPVTAZ2
+
+  REPPVTAZ1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref REPPVTRouteTable
+      SubnetId: !Ref SubnetREPPVTAZ1
+
+  REPPVTAZ2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref REPPVTRouteTable
+      SubnetId: !Ref SubnetREPPVTAZ2
+
+  RDS1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RDSRouteTable
+      SubnetId: !Ref SubnetRDS1
+
+  RDS2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RDSRouteTable
+      SubnetId: !Ref SubnetRDS2
+
+  ACCSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access Server Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-ACCESS
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: ACCSecurityGroup
+
+  ControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cluster communication with worker nodes
+      VpcId: !Ref VPCKUMO
+
+  ControlPlaneInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref SubnetAPIPUBCIDR
+
+  ControlPlaneInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref SubnetAPIPUB2CIDR
+
+  ControlPlaneInboundRule3:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref SubnetREPPUBCIDR
+
+  ControlPlaneInboundRule4:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref SubnetREPPUB2CIDR
+
+  MONGOSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Mongo Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-MONGO
+      VpcId: !Ref VPCMONGO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5666
+        ToPort: 5666
+        CidrIp: !Ref VpcKUMOCIDR
+      - IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+        CidrIp: !Ref VpcKUMOCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-MONGO
+
+  MONGOInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt MONGOSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: !Ref VpcKUMOCIDR
+
+  MONGOInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt MONGOSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 27017
+      ToPort: 27017
+      CidrIp: !Ref VpcKUMOCIDR
+
+  MONGOInboundRule3:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt MONGOSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 27017
+      ToPort: 27017
+      CidrIp: !Ref VpcKUMOCIDR
+
+  RIGHTSIZINGSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RightSizing Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-RIGHTSIZING
+      VpcId: !Ref VPCRIGHTSIZE
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5439
+        ToPort: 5439
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-RIGHTSIZE
+
+  RIGHTSIZINGInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RIGHTSIZINGSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      CidrIp: !Ref VpcKUMOCIDR
+
+  RIGHTSIZINGInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RIGHTSIZINGSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref RIGHTSIZINGSecurityGroup
+
+  WEBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web Server Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-WEB
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 5666
+        ToPort: 5666
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      - IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-WEB
+
+  WEBInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt WEBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  APISecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: API Server Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-API
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 5666
+        ToPort: 5666
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      - IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-API
+
+  APIInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt APISecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  APIEFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: API-EFS Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-API-EFS
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-API-EFS
+
+  APIEFSInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt APIEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      SourceSecurityGroupId: !Ref APISecurityGroup
+
+  APIEFSInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt APIEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  APIEFSInboundRule3:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt APIEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      CidrIp: !Ref SubnetAPIPUBCIDR
+
+  APIEFSInboundRule4:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt APIEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      CidrIp: !Ref SubnetAPIPUB2CIDR
+
+  REPSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Report Server Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-REPORT
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 5666
+        ToPort: 5666
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      - IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-REP
+
+  REPInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt REPSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  REPEFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Report EFS Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-REPORT-EFS
+      VpcId: !Ref VPCKUMO
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-REP-EFS
+
+  REPEFSInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt REPEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      SourceSecurityGroupId: !Ref REPSecurityGroup
+
+  REPEFSInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt REPEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  REPEFSInboundRule3:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt REPEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      CidrIp: !Ref SubnetREPPUBCIDR
+
+  REPEFSInboundRule4:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt REPEFSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      CidrIp: !Ref SubnetREPPUB2CIDR
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access Server Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-REDIS
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5666
+        ToPort: 5666
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      - IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+        SourceSecurityGroupId: !Ref NagiosSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-RED
+
+  RedisInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RedisSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      CidrIp: !Ref VpcKUMOCIDR
+
+  RedisInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RedisSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-RDS
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+        CidrIp:  10.191.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-RDS
+
+  RDSInboundRule1:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RDSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref APISecurityGroup
+
+  RDSInboundRule2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RDSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref REPSecurityGroup
+
+  RDSInboundRule3:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RDSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+
+  RDSInboundRule4:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt RDSSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref RDSSecurityGroup
+
+  NagiosSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Nagios Security Group
+      GroupName: !Sub SG-${Environment}-${Region}-NAGIOS
+      VpcId: !Ref VPCKUMO
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        SourceSecurityGroupId: !Ref ACCSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub SG-${Environment}-${Region}-NAGIOS
+
+Outputs:
+  VPCID:
+    Value: !Ref VPCKUMO
+    Export:
+      Name: Network-KumoVPCID
+  PublicSubnetID:
+    Value: !Ref SubnetTOOLS
+    Export:
+      Name: Network-KumoPublicSubnetID
+  SecurityGroupID:
+    Value: !Ref ACCSecurityGroup
+    Export:
+      Name: Network-KumoSecurityGroupID
+  VPCIDMongo:
+    Value: !Ref VPCMONGO
+    Export:
+      Name: Network-KumoVPCIDMongo
+
+  VPCIDRIGHTSIZE:
+    Value: !Ref VPCRIGHTSIZE
+    Export:
+      Name: Network-KumoVPCIDRIGHTSIZE
+
+  PublicSubnetIDMongo:
+    Value: !Ref SubnetMONGOPVT
+    Export:
+      Name: Network-KumoPublicSubnetIDMongo
+
+  SubnetIDRIGHTSIZE:
+    Value: !Ref SubnetRIGHTSIZE
+    Export:
+      Name: Network-KumoSubnetIDRIGHTSIZE
+
+  SecurityGroupIDMongo:
+    Value: !Ref MONGOSecurityGroup
+    Export:
+      Name: Network-KumoSecurityGroupIDMongo
+  PublicSubnetIDRedisAPI:
+    Value: !Ref SubnetREDAPI
+    Export:
+      Name: Network-KumoPublicSubnetIDRedisAPI
+  RedisSecurityGroupID:
+    Value: !Ref RedisSecurityGroup
+    Export:
+      Name: Network-KumoRedisSecurityGroupID
+  PublicSubnetIDRedisREP:
+    Value: !Ref SubnetREDREP
+    Export:
+      Name: Network-KumoPublicSubnetIDRedisREP
+  APIPVTSubnetID1:
+    Value: !Ref SubnetAPIPVTAZ1
+    Export:
+      Name: Network-KumoAPIPVTSubnetID1
+  APIPVTSubnetID2:
+    Value: !Ref SubnetAPIPVTAZ2
+    Export:
+      Name: Network-KumoAPIPVTSubnetID2
+  REPPVTSubnetID1:
+      Value: !Ref SubnetREPPVTAZ1
+      Export:
+        Name: Network-KumoREPPVTSubnetID1
+  REPPVTSubnetID2:
+      Value: !Ref SubnetREPPVTAZ2
+      Export:
+        Name: Network-KumoREPPVTSubnetID2
+  EFSAPISecurityGroup:
+    Value: !Ref APIEFSSecurityGroup
+    Export:
+      Name: Network-KumoEFSAPISecurityGroup
+  REPPVTSecurityGroup:
+    Value: !Ref REPEFSSecurityGroup
+    Export:
+      Name: Network-KumoREPPVTSecurityGroup
+  PublicSubnetIDRDS1:
+    Value: !Ref SubnetRDS1
+    Export:
+      Name: Network-KumoPublicSubnetIDRDS1
+  PublicSubnetIDRDS2:
+    Value: !Ref SubnetRDS2
+    Export:
+      Name: Network-KumoPublicSubnetIDRDS2
+  RDSSecurityGroup:
+    Value: !Ref RDSSecurityGroup
+    Export:
+      Name: Network-KumoRDSSecurityGroup
+  DBSubnetGroupName:
+    Value: !Ref RDSSubnetGroup
+    Export:
+      Name: Network-KumoDBSubnetGroupName
+  APISecurityGroupName:
+    Value: !Ref APISecurityGroup
+    Export:
+      Name: Network-KumoAPISecurityGroupName
+  REPSecurityGroupName:
+    Value: !Ref REPSecurityGroup
+    Export:
+      Name: Network-KumoREPSecurityGroupName
+  NagiosSecurityGroupID:
+    Value: !Ref NagiosSecurityGroup
+    Export:
+      Name: Network-KumoNagiosSecurityGroupID
+  SubnetAPIPUBName:
+    Value: !Ref SubnetAPIPUB
+    Export:
+      Name: Network-KumoSubnetAPIPUBName
+  SubnetAPIPUBName2:
+    Value: !Ref SubnetAPIPUB2
+    Export:
+      Name: Network-KumoSubnetAPIPUBName2
+  WEBSecurityGroupName:
+    Value: !Ref WEBSecurityGroup
+    Export:
+      Name: Network-KumoWEBSecurityGroupName
+  SubnetWEBPUBName:
+    Value: !Ref SubnetWEBPUB
+    Export:
+      Name: Network-KumoSubnetWEBPUBName
+  SubnetWEBPUBName2:
+    Value: !Ref SubnetWEBPUB2
+    Export:
+      Name: Network-KumoSubnetWEBPUBName2
+  SubnetREPPUBName:
+    Value: !Ref SubnetREPPUB
+    Export:
+      Name: Network-KumoSubnetREPPUBName
+  SubnetREPPUB2Name:
+    Value: !Ref SubnetREPPUB2
+    Export:
+      Name: Network-KumoSubnetREPPUB2Name
+  ControlPlaneSecurityGroup:
+    Value: !Ref ControlPlaneSecurityGroup
+    Export:
+      Name: Network-ControlPlaneSecurityGroup

@@ -1,0 +1,501 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Amazon EKS - Node Group
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: EKS Cluster
+        Parameters:
+          - ClusterName
+          - ClusterControlPlaneSecurityGroup
+      - Label:
+          default: Worker Node Configuration
+        Parameters:
+          - NodeGroupName
+          - NodeAutoScalingGroupMinSize
+          - NodeAutoScalingGroupDesiredCapacity
+          - NodeAutoScalingGroupMaxSize
+          - NodeInstanceType
+          - NodeImageId
+          - NodeRole
+          - NodeVolumeSize
+          - KeyName
+          - BootstrapArguments
+          - DisableIMDSv1
+      - Label:
+          default: Worker Network Configuration
+        Parameters:
+          - VpcId
+          - Subnets
+
+Parameters:
+  BootstrapArguments:
+    Type: String
+    Default: ""
+    Description: "Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami"
+
+  ClusterControlPlaneSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup::Id"
+    Description: The security group of the cluster control plane.
+
+  ClusterName:
+    Type: String
+    Default: "kumo-eks-cluster"
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+
+  KeyName:
+    Type: "AWS::EC2::KeyPair::KeyName"
+    Description: The EC2 Key Pair to allow SSH access to the instances
+
+  NodeAutoScalingGroupDesiredCapacity:
+    Type: Number
+    Default: 2
+    Description: Desired capacity of Node Group ASG.
+
+  NodeAutoScalingGroupMaxSize:
+    Type: Number
+    Default: 2
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+
+  NodeAutoScalingGroupMinSize:
+    Type: Number
+    Default: 2
+    Description: Minimum size of Node Group ASG.
+
+  NodeGroupName:
+    Type: String
+    Default: "kumo-eks-apinode"
+    Description: Unique identifier for the Node Group.
+
+  NodeImageId:
+    Type: String
+    Default: "ami-018d2b2a3d1251041"
+    Description: (Optional) Specify your own custom image ID. This value overrides any AWS Systems Manager Parameter Store value specified above.
+
+  NodeRole:
+    Type: String
+    Default: "arn:aws:iam::336101051063:role/kumoeksnoderole"
+
+  ACCSecurityGroup:
+    Type: String
+
+  DisableIMDSv1:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "false"
+      - "true"
+
+  NodeInstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.2xlarge
+      - t3.large
+      - t3.medium
+      - t3.micro
+      - t3.nano
+      - t3.small
+      - t3.xlarge
+
+    ConstraintDescription: Must be a valid EC2 instance type
+    Description: EC2 instance type for the node instances
+
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    Description: The VPC of the worker instances
+
+  Region:
+    Description: Application Environment Region
+    Type: String
+
+  APIPubSubnet1:
+    Type: String
+
+  APIPubSubnet2:
+    Type: String
+
+  EFSDNSAPI:
+      Type: String
+
+Mappings:
+  ServicePrincipalPartitionMap:
+    aws:
+      EC2: ec2.amazonaws.com
+      EKS: eks.amazonaws.com
+      EKSFargatePods: eks-fargate-pods.amazonaws.com
+    aws-cn:
+      EC2: ec2.amazonaws.com.cn
+      EKS: eks.amazonaws.com
+      EKSFargatePods: eks-fargate-pods.amazonaws.com
+    aws-us-gov:
+      EC2: ec2.amazonaws.com
+      EKS: eks.amazonaws.com
+      EKSFargatePods: eks-fargate-pods.amazonaws.com
+
+Conditions:
+  HasNodeImageId: !Not
+    - "Fn::Equals":
+      - !Ref NodeImageId
+      - ""
+
+  IMDSv1Disabled:
+    "Fn::Equals":
+      - !Ref DisableIMDSv1
+      - "true"
+
+Resources:
+  NodeInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - !FindInMap
+                  - ServicePrincipalPartitionMap
+                  - !Ref 'AWS::Partition'
+                  - EC2
+        Version: 2012-10-17
+      Policies:
+        - PolicyName: S3-ReadOnly-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketACL
+                  - s3:GetBucketLocation
+                  - s3:GetBucketLogging
+                  - s3:GetBucketPolicy
+                  - s3:ListBucket
+                  - s3:ListAllMyBuckets
+                Resource: '*'
+        - PolicyName: S3-UploadDownload-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: '*'
+        - PolicyName: STS-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: '*'
+        - PolicyName: sidekiq-termination-autoscaling-policy-cli
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:CompleteLifecycleAction
+                  - autoscaling:RecordLifecycleActionHeartbeat
+                Resource: '*'
+        - PolicyName: Route53-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                Resource: '*'
+        - PolicyName: Athena-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - athena:StartQueryExecution
+                  - athena:ListDatabases
+                  - athena:GetQueryResults
+                Resource: '*'
+        - PolicyName: Glue-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:StartJobRun
+                  - glue:GetJobRun
+                  - glue:GetJob
+                Resource: '*'
+        - PolicyName: Redshift-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - redshift:DeleteCluster
+                  - redshift:CreateCluster
+                  - redshift:DescribeClusters
+                  - redshift:CreateClusterSubnetGroup
+                  - redshift:DescribeClusterSubnetGroups
+                Resource: '*'
+        - PolicyName: SQS-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ListQueues
+                  - sqs:GetQueueUrl
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:DeleteMessageBatch
+                Resource: '*'
+        - PolicyName: RDS-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:DescribeOrderableDBInstanceOptions
+                  - rds:DescribeDBInstances
+                Resource: '*'
+        - PolicyName: EC2-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeTags
+                  - ec2:DescribeImages
+                  - ec2:DescribeInternetGateways
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:CreateDefaultSubnet
+                  - ec2:DescribeVpcs
+                  - ec2:CreateInternetGateway
+                  - ec2:AttachInternetGateway
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeSecurityGroups
+                  - ec2:AssociateRouteTable
+                Resource: '*'
+        - PolicyName: CodeDeploy-DeploymentCreate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codedeploy:CreateDeployment
+                Resource: '*'
+      ManagedPolicyArns:
+        - !Sub >-
+          arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AWSCodeDeployDeployerAccess'
+      Path: /
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}/NodeInstanceRole'
+
+  APINodeSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Security group for all nodes in the cluster
+      Tags:
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: owned
+      VpcId: !Ref VpcId
+
+  APINodeSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      FromPort: 0
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref APINodeSecurityGroup
+      ToPort: 65535
+
+  ClusterControlPlaneSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      FromPort: 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref APINodeSecurityGroup
+      ToPort: 443
+
+  ControlPlaneEgressToAPINodeSecurityGroup:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      DestinationSecurityGroupId: !Ref APINodeSecurityGroup
+      FromPort: 1025
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 65535
+
+  ControlPlaneEgressToAPINodeSecurityGroupOn443:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      DestinationSecurityGroupId: !Ref APINodeSecurityGroup
+      FromPort: 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+
+  APINodeSecurityGroupFromControlPlaneIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      FromPort: 1025
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 65535
+
+  ControlPlaneEgressToAPINodeSecurityGroupOn2049:
+    Type: "AWS::EC2::SecurityGroupEgress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      DestinationSecurityGroupId: !Ref APINodeSecurityGroup
+      FromPort: 2049
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      ToPort: 2049
+
+  APINodeSecurityGroupFromControlPlaneIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      FromPort: 2049
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 2049
+
+  ControlPlaneEgressToAPINodeSecurityGroupOn22:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to SSH from the Access server
+      FromPort: 22
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ACCSecurityGroup
+      ToPort: 22
+
+  APINodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      FromPort: 443
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      ToPort: 443
+
+  APINodeSecurityGroupFromControlPlaneOn10250Ingress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 10250 to receive communication from cluster control plane
+      FromPort: 10250
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: tcp
+      CidrIp: 0.0.0.0/0
+      ToPort: 10250
+
+  APINodeSecurityGroupFromControlPlaneOn53Ingress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: APINodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 10250 to receive communication from cluster control plane
+      FromPort: 53
+      GroupId: !Ref APINodeSecurityGroup
+      IpProtocol: udp
+      CidrIp: 0.0.0.0/0
+      ToPort: 53
+
+  NodeLaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref NodeImageId
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+        - !Ref APINodeSecurityGroup
+        UserData: !Base64
+          "Fn::Sub": |
+            #!/bin/bash
+            set -o xtrace
+            /etc/eks/bootstrap.sh ${ClusterName}
+            /opt/aws/bin/cfn-signal --exit-code $? \
+                     --stack  ${AWS::StackName} \
+                     --resource NodeGroup  \
+                     --region ${AWS::Region}
+            efs_directory=/home/ubuntu/efs-api
+            mkdir -p $efs_directory
+            sudo mount -t nfs -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ${EFSDNSAPI}.efs.${AWS::Region}.amazonaws.com:/ $efs_directory
+
+        MetadataOptions:
+          HttpPutResponseHopLimit : 2
+          HttpEndpoint: enabled
+          HttpTokens: !If
+            - IMDSv1Disabled
+            - required
+            - optional
+
+  NodeGroup:
+    Type: 'AWS::EKS::Nodegroup'
+    Properties:
+      ClusterName: !Ref ClusterName
+      InstanceTypes:
+        - !Ref NodeInstanceType
+      Labels:
+        alpha.eksctl.io/cluster-name: !Ref ClusterName
+        alpha.eksctl.io/nodegroup-name: !Ref NodeGroupName
+      LaunchTemplate:
+        Id: !Ref NodeLaunchTemplate
+      NodeRole: !Ref NodeInstanceRole
+      NodegroupName: !Ref NodeGroupName
+      ScalingConfig:
+        DesiredSize: 2
+        MaxSize: 2
+        MinSize: 2
+      Subnets:
+        - !Ref APIPubSubnet1
+        - !Ref APIPubSubnet2
+      Tags:
+        alpha.eksctl.io/nodegroup-name: !Ref NodeGroupName
+        alpha.eksctl.io/nodegroup-type: managed
+
+
+Outputs:
+  NodeInstanceRole:
+    Description: The node instance role
+    Value: !GetAtt NodeInstanceRole.Arn
+
+  APINodeSecurityGroup:
+    Description: The security group for the node group
+    Value: !Ref APINodeSecurityGroup
+
+  NodeAutoScalingGroup:
+    Description: The autoscaling group
+    Value: !Ref NodeGroup

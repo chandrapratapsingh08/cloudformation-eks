@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Cloudformation Template to allow your AWS Account(s) to access Kumolus
+
+Parameters:
+  CodeDeployIAMRole:
+    Type: String
+    Default: "NA"
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  Email:
+    Type: String
+  WEBCodeDeployAutoScalingGroups:
+    Type: String
+  APICodeDeployAutoScalingGroups:
+    Type: String
+  REPCodeDeployAutoScalingGroups:
+    Type: String
+  ASGStackName:
+    Type: String
+    Default: ASG
+  ArtifactBucketName:
+    Type: String
+
+Conditions:
+  NoExistingRole: !Equals
+    - !Ref CodeDeployIAMRole
+    - "NA"
+
+Resources:
+
+  DeploymentSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: CodeDeploySNSTopic
+      DisplayName: !Sub CodeDeploy-${Environment}-${Region}
+  Subscription1:
+    Type: 'AWS::SNS::Subscription'
+    Properties:
+      TopicArn: !Ref DeploymentSNSTopic
+      Endpoint: !Ref Email
+      Protocol: "email"
+
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Condition: NoExistingRole
+    Properties:
+      Description: IAM role for Code Deploy Access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      RoleName: !Sub ${Environment}-CodeDeployServiceRole
+
+  CodeDeployWEBApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub ${Environment}-WEB
+      ComputePlatform: Server
+
+  CodeDeployAPIApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub ${Environment}-API
+      ComputePlatform: Server
+
+  CodeDeployReportApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub ${Environment}-REPORT
+      ComputePlatform: Server
+
+  WebDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployWEBApplication
+      DeploymentGroupName: !Sub ${Environment}-WEB-DEPLOYMENT
+      AutoScalingGroups:
+        - Ref: WEBCodeDeployAutoScalingGroups
+      DeploymentConfigName: "CodeDeployDefault.OneAtATime"
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+      ServiceRoleArn: !If [NoExistingRole, !GetAtt CodeDeployServiceRole.Arn, !Ref CodeDeployIAMRole]
+      TriggerConfigurations:
+        - TriggerEvents:
+            - DeploymentSuccess
+            - DeploymentRollback
+            - DeploymentFailure
+            - DeploymentStart
+
+          TriggerName: !Sub ${Environment}-${Region}-Deployment
+          TriggerTargetArn: !Ref DeploymentSNSTopic
+
+  APIDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployAPIApplication
+      DeploymentGroupName: !Sub ${Environment}-API-DEPLOYMENT
+      AutoScalingGroups:
+        - Ref: APICodeDeployAutoScalingGroups
+      DeploymentConfigName: "CodeDeployDefault.OneAtATime"
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+      ServiceRoleArn: !If [NoExistingRole, !GetAtt CodeDeployServiceRole.Arn, !Ref CodeDeployIAMRole]
+      TriggerConfigurations:
+        - TriggerEvents:
+            - DeploymentSuccess
+            - DeploymentRollback
+            - DeploymentFailure
+            - DeploymentStart
+
+          TriggerName: !Sub ${Environment}-${Region}-Deployment
+          TriggerTargetArn: !Ref DeploymentSNSTopic
+
+  REPDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployReportApplication
+      DeploymentGroupName: !Sub ${Environment}-REP-DEPLOYMENT
+      AutoScalingGroups:
+        - Ref: REPCodeDeployAutoScalingGroups
+      DeploymentConfigName: "CodeDeployDefault.OneAtATime"
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+      ServiceRoleArn: !If [NoExistingRole, !GetAtt CodeDeployServiceRole.Arn, !Ref CodeDeployIAMRole]
+      TriggerConfigurations:
+        - TriggerEvents:
+            - DeploymentSuccess
+            - DeploymentRollback
+            - DeploymentFailure
+            - DeploymentStart
+
+          TriggerName: !Sub ${Environment}-${Region}-Deployment
+          TriggerTargetArn: !Ref DeploymentSNSTopic

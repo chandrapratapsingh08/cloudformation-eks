@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Cloudformation Template to allow your AWS Account(s) to access Kumolus
+
+Parameters:
+  WEBSecurityGroupID:
+    Description: Security Group API
+    Type: AWS::EC2::SecurityGroup::Id
+  AMIWEB:
+    Type: AWS::EC2::Image::Id
+  WEBInstanceSize:
+    Type: String
+    Default: t3.small
+  KeyName:
+    Type: String
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  ExistingInstanceProfileRole:
+    Type: String
+    Default: "NA"
+
+Conditions:
+  NoExistingRole: !Equals
+    - !Ref ExistingInstanceProfileRole
+    - "NA"
+
+Resources:
+
+
+  IAMInstanceProfileRole:
+    Type: AWS::IAM::Role
+    Condition: NoExistingRole
+    Properties:
+      Description: IAM instance profile role for EC2
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: S3-ReadOnly-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketACL
+                  - s3:GetBucketLocation
+                  - s3:GetBucketLogging
+                  - s3:GetBucketPolicy
+                  - s3:ListBucket
+                  - s3:ListAllMyBuckets
+                Resource: '*'
+        - PolicyName: S3-UploadDownload-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: '*'
+        - PolicyName: STS-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: '*'
+        - PolicyName: sidekiq-termination-autoscaling-policy-cli
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:CompleteLifecycleAction
+                  - autoscaling:RecordLifecycleActionHeartbeat
+                Resource: '*'
+        - PolicyName: Route53-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                Resource: '*'
+        - PolicyName: Athena-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - athena:StartQueryExecution
+                  - athena:ListDatabases
+                  - athena:GetQueryResults
+                Resource: '*'
+        - PolicyName: Glue-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:StartJobRun
+                  - glue:GetJobRun
+                  - glue:GetJob
+                Resource: '*'
+        - PolicyName: Redshift-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - redshift:DeleteCluster
+                  - redshift:CreateCluster
+                  - redshift:DescribeClusters
+                  - redshift:CreateClusterSubnetGroup
+                  - redshift:DescribeClusterSubnetGroups
+                Resource: '*'
+        - PolicyName: SQS-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ListQueues
+                  - sqs:GetQueueUrl
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:DeleteMessageBatch
+                Resource: '*'
+        - PolicyName: RDS-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:DescribeOrderableDBInstanceOptions
+                  - rds:DescribeDBInstances
+                Resource: '*'
+        - PolicyName: EC2-Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeTags
+                  - ec2:DescribeImages
+                  - ec2:DescribeInternetGateways
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:CreateDefaultSubnet
+                  - ec2:DescribeVpcs
+                  - ec2:CreateInternetGateway
+                  - ec2:AttachInternetGateway
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeSecurityGroups
+                  - ec2:AssociateRouteTable
+                Resource: '*'
+        - PolicyName: CodeDeploy-DeploymentCreate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codedeploy:CreateDeployment
+                Resource: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AWSCodeDeployDeployerAccess
+      RoleName: !Sub ${Environment}-EC2-InstanceProfile
+
+  RootInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: NoExistingRole
+    Properties:
+      InstanceProfileName: !Sub ${Environment}-EC2-InstanceProfile
+      Path: /
+      Roles:
+        - !If [NoExistingRole, !Ref IAMInstanceProfileRole, !Ref ExistingInstanceProfileRole]
+
+  WEBLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Sub LC-${Environment}-${Region}-WEB
+      AssociatePublicIpAddress: "true"
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: "gp2"
+            DeleteOnTermination: "true"
+      IamInstanceProfile: !If [NoExistingRole, !Ref RootInstanceProfile, !Ref ExistingInstanceProfileRole]
+      KeyName:
+        Ref: "KeyName"
+      ImageId: !Ref "AMIWEB"
+      InstanceType: !Ref "WEBInstanceSize"
+      SecurityGroups:
+        - !Ref "WEBSecurityGroupID"
+
+Outputs:
+  LCWEB:
+    Value: !Ref WEBLaunchConfig
+    Export:
+      Name: LC-KumoWEB

@@ -1,0 +1,67 @@
+# AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  Environment:
+    Description: Application Environment
+    Type: String
+    AllowedValues:
+      - DEV
+      - STG
+      - PRD
+      - TEST
+  BucketName:
+    Type: String
+    Description: cfn template bucket name
+  Email:
+    Type: String
+    Default: devops@cloudbolt.io
+  ASGStackName:
+    Type: String
+    Default: ASG
+  CodeDeployIAMRole:
+    Type: String
+    Default: "NA"
+  CodeDeployS3Bucket:
+    Type: String
+
+  APICodeDeployAutoScalingGroups:
+    Type: String
+
+  WEBCodeDeployAutoScalingGroups:
+    Type: String
+
+  REPCodeDeployAutoScalingGroups:
+    Type: String
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      ALIAS: UE1
+    us-west-1:
+      ALIAS: UW1
+    us-east-2:
+      ALIAS: UE2
+    us-west-2:
+      ALIAS: UW2
+    eu-central-1:
+      ALIAS: EUC1
+    ap-southeast-2:
+      ALIAS: APSE2
+    ca-central-1:
+      ALIAS: CAC1
+
+Resources:
+  codedeploy:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-codedeploy.yaml
+      Parameters:
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+        Email: !Ref Email
+        CodeDeployIAMRole: !Ref CodeDeployIAMRole
+        ArtifactBucketName: !Ref CodeDeployS3Bucket
+        WEBCodeDeployAutoScalingGroups: !ImportValue
+             'Fn::Sub': '${ASGStackName}-WEB'
+        APICodeDeployAutoScalingGroups: !Ref APICodeDeployAutoScalingGroups
+        REPCodeDeployAutoScalingGroups: !Ref REPCodeDeployAutoScalingGroups

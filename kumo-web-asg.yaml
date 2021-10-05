@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This template deploys an ASG behind an ELB load balancer"
+Parameters:
+  VPCIDASG:
+    Description: VPC for ASG
+    Type: String
+  WebSubnet1:
+    Description: Web ASG Subnet 1
+    Type: String
+  WebSubnet2:
+    Description: Web ASG Subnet 2
+    Type: String
+  LCWEB:
+    Description: Web Launch Configuration
+    Type: String
+  WEBALBTG:
+    Description: WEB Application Load Balancer Target Group
+    Type: String
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  AZ1:
+    Description: Availability Zone 1
+    Type: String
+  AZ2:
+    Description: Availability Zone 2
+    Type: String
+  Email:
+    Type: String
+
+
+Resources:
+  ASGSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: AutoSalingSNSTopic
+      DisplayName: !Sub AutoScaling-${Environment}-${Region}
+  ASGTopicSubscription:
+    Type: 'AWS::SNS::Subscription'
+    Properties:
+      TopicArn: !Ref ASGSNSTopic
+      Endpoint: !Ref Email
+      Protocol: "email"
+
+  AutoScalingWeb:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AutoScalingGroupName: !Sub ASG-${Environment}-${Region}-WEB
+      VPCZoneIdentifier:
+        - !Ref WebSubnet1
+        - !Ref WebSubnet2
+      HealthCheckType: EC2
+      AvailabilityZones:
+        - !Ref AZ1
+        - !Ref AZ2
+      LaunchConfigurationName: !Ref LCWEB
+      TargetGroupARNs:
+        - !Ref WEBALBTG
+      MinSize: '0'
+      MaxSize: '0'
+      NotificationConfigurations:
+        - TopicARN: !Ref ASGSNSTopic
+          NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      HealthCheckGracePeriod: 300
+      MaxInstanceLifetime: 2592000
+      Tags:
+        - Key: Name
+          Value: !Sub ASG-${Environment}-${Region}-WEB
+          PropagateAtLaunch: 'true'
+
+Outputs:
+  AutoScalingWEB:
+    Value: !Ref AutoScalingWeb
+    Export:
+      Name: ASG-WEB

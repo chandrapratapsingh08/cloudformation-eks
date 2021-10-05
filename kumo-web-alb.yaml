@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This template deploys an ASG behind an ALB load balancer"
+
+Parameters:
+
+  VPCID:
+    Description: KUMO MAIN VPC ID
+    Type: AWS::EC2::VPC::Id
+
+  WEBSecurityGroupID:
+    Description: Web Security Group
+    Type: AWS::EC2::SecurityGroup::Id
+
+  SubnetWEBPUBAZ1:
+    Description: WEB Subnet for AZ1
+    Type: AWS::EC2::Subnet::Id
+
+  SubnetWEBPUBAZ2:
+    Description: WEB Subnet for AZ2
+    Type: AWS::EC2::Subnet::Id
+
+  Environment:
+    Description: Application Environment
+    Type: String
+
+  Region:
+    Description: Application Region
+    Type: String
+
+  CertificateArn:
+    Description: ALB Listener Certificate Arn
+    Type: String
+    Default: "arn:aws:iam::336101051063:server-certificate/kumocert20-May.co"
+
+  HostedZone:
+    Description: Route53 HostedZone
+    Type: String
+    Default: Z19CFP8G9R8JU4
+
+Conditions:
+  IsProduction: !Equals
+    - !Ref Environment
+    - PRD
+
+  WEBApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: !Sub ALB-${Environment}-${Region}-WEB
+      SecurityGroups:
+        - !Ref "WEBSecurityGroupID"
+      Subnets:
+        - !Ref "SubnetWEBPUBAZ1"
+        - !Ref "SubnetWEBPUBAZ2"
+      Tags:
+        - Key: Name
+          Value: !Sub ALB-${Environment}-${Region}-WEB
+        - Key: Environment
+          Value: Production
+
+  WEBHTTPlistener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: "redirect"
+          RedirectConfig:
+            Protocol: "HTTPS"
+            Port: 443
+            Host: "#{host}"
+            Path: "/#{path}"
+            Query: "#{query}"
+            StatusCode: "HTTP_301"
+      LoadBalancerArn: !Ref "WEBApplicationLoadBalancer"
+      Port: 80
+      Protocol: "HTTP"
+
+  WEBHTTPSlistener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+        - Type: "forward"
+          TargetGroupArn: !Ref WEBALBTargetGroup
+      LoadBalancerArn: !Ref "WEBApplicationLoadBalancer"
+      Port: 443
+      Protocol: "HTTPS"
+
+  WEBALBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: !Sub TARGET-GROUP-${Environment}-${Region}-WEB
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: '/'
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 10
+      # Matcher:
+      #   HttpCode: '200-299'
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: instance
+      VpcId: !Ref VPCID
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 60
+
+  WebLoadBalancerAlias:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: IsProduction
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      RecordSets:
+        - Name: !Sub clientweb-${Region}.kumolus.net.
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt WEBApplicationLoadBalancer.CanonicalHostedZoneID
+            DNSName: !GetAtt WEBApplicationLoadBalancer.DNSName
+
+
+Outputs:
+  WEBALB:
+    Value: !Ref WEBApplicationLoadBalancer
+  WEBALBTG:
+    Value: !Ref WEBALBTargetGroup
+    Export:
+      Name: ALB-KumoWEBALBTG

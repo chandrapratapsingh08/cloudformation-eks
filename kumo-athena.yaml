@@ -1,0 +1,18 @@
+Resources:
+  MyAthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: kumo-workgroup
+      Description: Kumolus Reporting WorkGroup
+      State: ENABLED
+      Tags:
+        - Key: "Owner"
+          Value: "DevOps"
+        - Key: "Environment"
+          Value: "Production"
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: false
+        PublishCloudWatchMetricsEnabled: true
+        RequesterPaysEnabled: false
+        ResultConfiguration:
+          OutputLocation: !Sub s3://athena-queryprocess-logs-${AWS::Region}/kumo-workgroup

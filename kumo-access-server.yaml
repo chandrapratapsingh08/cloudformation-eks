@@ -1,0 +1,111 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Access Server EC2 Instance creation
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+  PublicSubnetID:
+    Type: AWS::EC2::Subnet::Id
+    Description: Select a public subnet to launch into
+  SecurityGroups:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Select a security group to launch into
+  LinuxAMI:
+    Type: String
+    Description: Ubuntu 20.04 EC2 AMI ID
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: String
+  HostedZone:
+    Description: Route53 HostedZone
+    Type: String
+    Default: kumolus.com.
+
+Conditions:
+  IsProduction: !Equals
+    - !Ref Environment
+    - PRD
+
+Resources:
+
+  # Ec2InstanceRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     Description: IAM role for S3 Read Only Access
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service:
+  #               - ec2.amazonaws.com
+  #           Action:
+  #             - 'sts:AssumeRole'
+  #     Path: /
+  #     ManagedPolicyArns:
+  #       - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+  #     RoleName: !Sub IAM-${Environment}-${Region}-EC2-AccessServer-InstanceProfile
+
+  # RootInstanceProfile:
+  #   Type: AWS::IAM::InstanceProfile
+  #   Properties:
+  #     Path: /
+  #     Roles:
+  #       - !Ref Ec2InstanceRole
+
+  AccessEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LinuxAMI
+      InstanceType:
+        Ref: InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnetID
+      SecurityGroupIds: !Ref SecurityGroups
+      # IamInstanceProfile: !Ref RootInstanceProfile
+      Tags:
+      - Key: Environment
+        Value: Production
+      - Key: Name
+        Value: !Sub EC2-${Environment}-${Region}-ACCESS-SERVER
+
+  IPAssoc:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref AccessEC2Instance
+
+  AccessServerDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: IsProduction
+    Properties:
+      HostedZoneName: !Ref HostedZone
+      Comment: DNS name for access server
+      Name: !Sub ${Region}-access.kumolus.com
+      Type: A
+      TTL: '900'
+      ResourceRecords:
+      - !Ref IPAssoc
+
+Outputs:
+  PrivateIp:
+    Description: Access Server Private IP
+    Value: !GetAtt AccessEC2Instance.PrivateIp
+    Export:
+      Name: Access-PrivateIP
+  PublicIp:
+    Description: Access Server Public IP
+    Value: !GetAtt AccessEC2Instance.PublicIp
+    Export:
+      Name: Access-PublicIp
+  InstanceID:
+    Description: Access Instance ID
+    Value: !Ref AccessEC2Instance
+    Export:
+      Name: Access-InstanceID

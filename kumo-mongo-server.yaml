@@ -1,0 +1,65 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Mongo Standalone EC2 Instance creation
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.large
+  PublicSubnetID:
+    Type: AWS::EC2::Subnet::Id
+    Description: Mongo subnet ID
+  SecurityGroupID:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Mongo Security group
+  LinuxAMI:
+    Type: String
+    Description: Ubuntu 20.04 EC2 AMI ID
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: String
+
+Resources:
+
+  MongoEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LinuxAMI
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnetID
+      SecurityGroupIds:
+        - !Ref SecurityGroupID
+      UserData: !Base64 |
+        #!/bin/bash -ex
+        apt-get update -y
+        wget -qO - https://www.mongodb.org/static/pgp/server-4.2.asc | sudo apt-key add -
+        echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.2 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.2.list
+        apt-get update -y
+        apt-get install -y mongodb-org
+        systemctl start mongod
+        systemctl enable mongod
+
+      Tags:
+      - Key: Environment
+        Value: Production
+      - Key: Name
+        Value: !Sub EC2-${Environment}-${Region}-MONGO-STANDALONE
+
+Outputs:
+  PrivateIp:
+    Description: Mongo Server Private IP
+    Value: !GetAtt MongoEC2Instance.PrivateIp
+    Export:
+      Name: Mongo-PrivateIP
+  InstanceID:
+    Description: Mongo Instance ID
+    Value: !Ref MongoEC2Instance
+    Export:
+      Name: Mongo-InstanceID

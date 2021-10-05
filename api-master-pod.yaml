@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-master
+  namespace: api-master
+spec:
+  restartPolicy: Always
+  serviceAccountName: docker-registry
+  containers:
+  - name: api-master
+    image: kumomp/production:api-master-saas-v2.0.2
+    imagePullPolicy: Always
+    ports:
+    - containerPort: 80
+    - containerPort: 443
+    - containerPort: 8982
+    - containerPort: 3200
+    command: ["/bin/sh"]
+    args: [bundle config ssl_verify_mode 0 && echo ":ssl_verify_mode: 0" > ~/.gemrc]
+    env:
+      - name: SAAS_ENV
+        value: true
+      - name: ORG_SETUP
+        value: complete
+      - name: DOCKER_SIDEKIQ
+        value: false
+    volumeMounts:
+    - name: my-volume
+      mountPath: /home/kumolus/api
+    - name: my-volume1
+      mountPath: /data/mount
+    - name: my-volume2
+      mountPath: /home/kumolus/api/log
+    - name: my-volume3
+      mountPath: /home/kumolus/node-api
+    - name: my-volume4
+      mountPath: /data/api/shared/solr_data
+    - name: api_gems
+      mountPath: /usr/local/bundle
+  volumes:
+  - name: my-volume
+    hostPath:
+      path: /home/ubuntu/api
+  - name: my-volume1
+    hostPath:
+      path: /home/ubuntu/efs-api/docker-shared-data
+  - name: my-volume2
+    hostPath:
+      path: /home/ubuntu/efs-api/docker-shared-data/log
+  - name: my-volume3
+    hostPath:
+      path: /home/ubuntu/node-api
+  - name: my-volume4
+    hostPath:
+      path: /home/ubuntu/efs-api/solr_data
+  - name: api_gems
+  nodeName: ip-10-191-11-6.ec2.internal

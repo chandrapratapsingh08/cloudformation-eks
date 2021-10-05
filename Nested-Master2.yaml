@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Nested-Master2 create EKS Cluster for Kumolus.
+
+Parameters:
+
+  Environment:
+    Description: Application Environment
+    Type: String
+    AllowedValues:
+      - DEV
+      - STG
+      - PRD
+      - TEST
+
+  BucketName:
+    Description: cfn template bucket name
+    Type: String
+
+  NetworkStackName:
+    Type: String
+    Default: Network
+
+  EFSAPIStackName:
+    Type: String
+    Default: EFSAPI
+
+  EFSREPStackName:
+    Type: String
+    Default: EFSREP
+
+  RedisAMI:
+    Type: String
+    Description: Redis AMI
+  KeyName:
+    Type: String
+  NetworkStackName:
+    Type: String
+    Default: Network
+  EFSAPIStackName:
+    Type: String
+    Default: EFSAPI
+  EFSREPStackName:
+    Type: String
+    Default: EFSREP
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AZ1: us-east-1a
+      AZ2: us-east-1b
+      ALIAS: UE1
+    us-west-1:
+      AZ1: us-west-1b
+      AZ2: us-west-1c
+      ALIAS: UW1
+    us-east-2:
+      AZ1: us-east-2a
+      AZ2: us-east-2b
+      ALIAS: UE2
+    us-west-2:
+      AZ1: us-west-2a
+      AZ2: us-west-2b
+      ALIAS: UW2
+    eu-central-1:
+      AZ1: eu-central-1a
+      AZ2: eu-central-1b
+      ALIAS: EUC1
+    ap-southeast-2:
+      AZ1: ap-southeast-2a
+      AZ2: ap-southeast-2b
+      ALIAS: APSE2
+    ca-central-1:
+      AZ1: ca-central-1a
+      AZ2: ca-central-1b
+      ALIAS: CAC1
+
+Resources:
+
+  Cluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-cluster.yaml
+      Parameters:
+        ClusterControlPlaneSecurityGroup: !ImportValue
+           'Fn::Sub': '${NetworkStackName}-ControlPlaneSecurityGroup'
+        PublicSubnetID1: !ImportValue
+           'Fn::Sub': '${NetworkStackName}-KumoSubnetAPIPUBName'
+        PublicSubnetID2: !ImportValue
+           'Fn::Sub': '${NetworkStackName}-KumoSubnetAPIPUBName2'
+        PrivateSubnetID1: !ImportValue
+           'Fn::Sub': '${NetworkStackName}-KumoAPIPVTSubnetID1'
+        PrivateSubnetID2: !ImportValue
+           'Fn::Sub': '${NetworkStackName}-KumoAPIPVTSubnetID2'
+        VPC: !ImportValue
+           'Fn::Sub': '${NetworkStackName}-KumoVPCID'
+
+  RedisAPI:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-redis-api.yaml
+      Parameters:
+        PublicSubnetIDRedisAPI: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoPublicSubnetIDRedisAPI'
+        SecurityGroupsRedisAPI: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoRedisSecurityGroupID'
+        RedisAMI: !Ref RedisAMI
+        KeyName: !Ref KeyName
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  RedisREP:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-redis-rep.yaml
+      Parameters:
+        PublicSubnetIDRedisREP: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoPublicSubnetIDRedisREP'
+        SecurityGroupsRedisREP: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoRedisSecurityGroupID'
+        RedisAMI: !Ref RedisAMI
+        KeyName: !Ref KeyName
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  GLUE:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-glue.yaml
+      Parameters:
+        Environment: !Ref Environment
+  Athena:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-athena.yaml
+
+  LCConfig:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-web-lc.yaml
+      Parameters:
+        WEBSecurityGroupID: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoWEBSecurityGroupName'
+        AMIWEB: !Ref AMIWEB
+        KeyName: !Ref KeyName
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+        ExistingInstanceProfileRole: !Ref ExistingInstanceProfileRole
+
+  ALB:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-web-alb.yaml
+      Parameters:
+        VPCID: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-VPCID'
+        WEBSecurityGroupID: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoWEBSecurityGroupName'
+        SubnetWEBPUBAZ1: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetWEBPUBName'
+        SubnetWEBPUBAZ2: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetWEBPUBName2'
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]

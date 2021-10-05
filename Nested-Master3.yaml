@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Nested-Master3 create API and Reporting NodeGroup for Kumolus EKS Cluster.
+
+Parameters:
+
+  Environment:
+    Description: Application Environment
+    Type: String
+    AllowedValues:
+      - DEV
+      - STG
+      - PRD
+      - TEST
+
+  BootstrapArguments:
+    Type: String
+    Default: ""
+    Description: "Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami"
+
+  NodeAutoScalingGroupDesiredCapacity:
+    Type: Number
+    Default: 2
+    Description: Desired capacity of Node Group ASG.
+
+  NodeAutoScalingGroupMaxSize:
+    Type: Number
+    Default: 2
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+
+  NodeAutoScalingGroupMinSize:
+    Type: Number
+    Default: 2
+    Description: Minimum size of Node Group ASG.
+
+  BucketName:
+    Description: cfn template bucket name
+    Type: String
+
+  KeyName:
+      Type: String
+      Default: "devops-k8s"
+
+  NodeRole:
+    Type: String
+    Default: "arn:aws:iam::336101051063:role/kumoeksnoderole"
+
+  DisableIMDSv1:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "false"
+      - "true"
+
+  AMIMASTER:
+    Type: String
+
+  NodeInstanceType:
+    Type: String
+    AllowedValues:
+      - t3.2xlarge
+      - t3.large
+      - t3.medium
+      - t3.micro
+      - t3.nano
+      - t3.small
+      - t3.xlarge
+
+    ConstraintDescription: Must be a valid EC2 instance type
+    Description: EC2 instance type for the node instances
+
+  NetworkStackName:
+    Type: String
+    Default: Network
+
+  EFSAPIStackName:
+    Type: String
+    Default: EFSAPI
+
+  EFSREPStackName:
+    Type: String
+    Default: EFSREP
+
+  LCStackName:
+    Type: String
+    Default: LC
+
+  ALBStackName:
+    Type: String
+    Default: ALB
+
+  NotificationEmail:
+    Type: String
+    Default: devops@kumolus.com
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AZ1: us-east-1a
+      AZ2: us-east-1b
+      ALIAS: UE1
+    us-west-1:
+      AZ1: us-west-1b
+      AZ2: us-west-1c
+      ALIAS: UW1
+    us-east-2:
+      AZ1: us-east-2a
+      AZ2: us-east-2b
+      ALIAS: UE2
+    us-west-2:
+      AZ1: us-west-2a
+      AZ2: us-west-2b
+      ALIAS: UW2
+    eu-central-1:
+      AZ1: eu-central-1a
+      AZ2: eu-central-1b
+      ALIAS: EUC1
+    ap-southeast-2:
+      AZ1: ap-southeast-2a
+      AZ2: ap-southeast-2b
+      ALIAS: APSE2
+    ca-central-1:
+      AZ1: ca-central-1a
+      AZ2: ca-central-1b
+      ALIAS: CAC1
+
+Resources:
+
+  APINodeGroup:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-api-nodegroup.yaml
+      Parameters:
+        VpcId: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoVPCID'
+        KeyName: !Ref KeyName
+        ClusterControlPlaneSecurityGroup: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-ControlPlaneSecurityGroup'
+        ACCSecurityGroup: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSecurityGroupID'
+        NodeImageId: !Ref AMIMASTER
+        EFSDNSAPI: !ImportValue
+            'Fn::Sub': '${EFSAPIStackName}-EFSDNSAPI'
+        APIPubSubnet1: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetAPIPUBName'
+        APIPubSubnet2: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetAPIPUBName2'
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  REPNodeGroup:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-rep-nodegroup.yaml
+      Parameters:
+        VpcId: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoVPCID'
+        KeyName: !Ref KeyName
+        ClusterControlPlaneSecurityGroup: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-ControlPlaneSecurityGroup'
+        ACCSecurityGroup: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSecurityGroupID'
+        NodeImageId: !Ref AMIMASTER
+        EFSDNSREP: !ImportValue
+            'Fn::Sub': '${EFSREPStackName}-EFSDNSREP'
+        REPPubSubnet1: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetREPPUBName'
+        REPPubSubnet2: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetREPPUB2Name'
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+
+  ASG:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${BucketName}/templates/kumo-web-asg.yaml
+      Parameters:
+        VPCIDASG: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-VPCID'
+        WebSubnet1: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetWEBPUBName'
+        WebSubnet2: !ImportValue
+            'Fn::Sub': '${NetworkStackName}-KumoSubnetWEBPUBName2'
+        LCWEB: !ImportValue
+            'Fn::Sub': '${LCStackName}-KumoWEB'
+        WEBALBTG: !ImportValue
+            'Fn::Sub': '${ALBStackName}-KumoWEBALBTG'
+        Environment: !Ref Environment
+        Region: !FindInMap [RegionMap, !Ref "AWS::Region", ALIAS]
+        AZ1: !FindInMap [RegionMap, !Ref "AWS::Region", AZ1]
+        AZ2: !FindInMap [RegionMap, !Ref "AWS::Region", AZ2]
+        Email: !Ref NotificationEmail

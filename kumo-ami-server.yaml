@@ -1,0 +1,115 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AMI Server EC2 Instance creation
+Parameters:
+
+  SubnetAPIPUBName:
+    Type: AWS::EC2::Subnet::Id
+    Description: Select a public subnet to launch into
+
+  APISecurityGroupName:
+    Type: String
+    Description: Select a security group to launch into
+
+  REPSecurityGroupName:
+    Type: String
+    Description: Select a security group to launch into
+
+  ACCSecurityGroupName:
+    Type: String
+    Description: Select a security group to launch into
+
+  LinuxAMI:
+    Type: AWS::EC2::Image::Id
+    Description: Ubuntu 20.04 EC2 AMI ID
+
+  Region:
+    Description: Application Environment Region
+    Type: String
+
+  KeyName:
+    Description: Name of an EC2 KeyPair
+    Type: String
+
+  InstanceType:
+    Description: Instance Type
+    Type: String
+
+  Environment:
+    Description: Application Environment
+    Type: String
+Resources:
+  EC2InstanceAMI:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LinuxAMI
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      Tags:
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Name
+        Value: !Sub EC2-${Region}-AMI-SERVER
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: '250'
+            DeleteOnTermination: 'true'
+            Encrypted: 'true'
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: "APISecurityGroupName"
+            - Ref: "ACCSecurityGroupName"
+            - Ref: "REPSecurityGroupName"
+
+          SubnetId:
+            Ref: "SubnetAPIPUBName"
+      UserData: !Base64 |
+        #!/bin/bash -ex
+        apt-get update
+        apt-get install -y apt-transport-https ca-certificates curl software-properties-common wget vim
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        add-apt-repository \
+        "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+        $(lsb_release -cs) \
+        stable"
+        apt-get update
+        apt-get install -y docker-ce
+        usermod -aG docker ubuntu
+        curl -L https://github.com/docker/compose/releases/download/1.21.0/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+        mkdir -p /home/ubuntu/redis
+        cd /home/ubuntu
+        cat > docker-compose.yml <<- "EOF"
+        version: '2'
+
+        services:
+         redis:
+           image: 'redis:3.2-alpine'
+           container_name: 'redis'
+           command: redis-server
+           mem_limit: 3 GB
+           ports:
+             - '6379:6379'
+           volumes:
+             - '/home/ubuntu/redis:/data'
+           restart: always
+        EOF
+
+        docker-compose up -d
+
+Outputs:
+  PublicIp:
+    Description: Server Public IP
+    Value: !GetAtt EC2InstanceAMI.PublicIp
+    Export:
+      Name: AMIServer-PublicIp
+  InstanceID:
+    Description: The Instance ID
+    Value: !Ref EC2InstanceAMI
+    Export:
+      Name: AMIServer-InstanceID

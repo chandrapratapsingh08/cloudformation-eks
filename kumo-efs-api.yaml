@@ -1,0 +1,74 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This cloudformation will create encryped Elastic File System.
+Parameters:
+  SystemName:
+    Type: String
+    Description: System for which this cloudformation is created.
+    Default: EFS-API
+  Environment:
+    Type: String
+    Description: Environment for which this cloudformation is getting created
+    Default: Prod
+  SubnetEFSAPIAZ1:
+    Type: String
+    Description: Private subnet in availability zone A
+  SubnetEFSAPIAZ2:
+    Type: String
+    Description: Private subnet in availability zone B
+  EC2InstanceLinkedEFSFileSystemTagName:
+    Type: String
+    Description: Tag name of Elastic File System.
+    Default: elastic-file-system
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  EFSAPISecurityGroup:
+    Type: String
+    Description: Select a security group to launch into
+  Encryption:
+    Type: String
+    Default: true
+  ThroughputInMibps:
+    Type: Number
+    Default: 5
+  Throughput:
+    Type: String
+    Default: provisioned
+Resources:
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemTags:
+      - Key: Name
+        Value: !Sub EFS-${Environment}-${Region}-API
+      - Key: Environment
+        Value: Production
+      Encrypted: !Ref Encryption
+      ProvisionedThroughputInMibps: !Ref ThroughputInMibps
+      ThroughputMode: !Ref Throughput
+  EFSMountTargetAZa:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId:
+        Ref: SubnetEFSAPIAZ1
+      SecurityGroups: [ !Ref EFSAPISecurityGroup ]
+  EFSMountTargetAZb:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId:
+        Ref: SubnetEFSAPIAZ2
+      SecurityGroups: [ !Ref EFSAPISecurityGroup ]
+
+Outputs:
+  EFSDNSAPI:
+    Value: !Ref EFSFileSystem
+    Export:
+      Name: EFSAPI-EFSDNSAPI

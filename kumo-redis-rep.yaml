@@ -1,0 +1,55 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Redis Report EC2 Instance creation
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.small
+  PublicSubnetIDRedisREP:
+    Type: AWS::EC2::Subnet::Id
+    Description: Select a public subnet to launch into
+  SecurityGroupsRedisREP:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Select a security group to launch into
+  RedisAMI:
+    Type: String
+    Description: Redis API Server AMI
+  Environment:
+    Description: Application Environment
+    Type: String
+  Region:
+    Description: Application Environment Region
+    Type: String
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: String
+
+Resources:
+
+  RedisREPEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref RedisAMI
+      InstanceType:
+        Ref: InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnetIDRedisREP
+      SecurityGroupIds: !Ref SecurityGroupsRedisREP
+      Tags:
+      - Key: Environment
+        Value: Production
+      - Key: Name
+        Value: !Sub EC2-${Environment}-${Region}-RED-REPORT
+
+Outputs:
+  PrivateIp:
+    Description: Redis-REP Server Private IP
+    Value: !GetAtt RedisREPEC2Instance.PrivateIp
+    Export:
+      Name: Redis-REP-PrivateIP
+  InstanceID:
+    Description: Redis-REP Instance ID
+    Value: !Ref RedisREPEC2Instance
+    Export:
+      Name: Redis-REP-InstanceID

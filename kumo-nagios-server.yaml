@@ -1,0 +1,58 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nagios Server EC2 Instance creation
+Parameters:
+  SubnetID:
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+  LinuxAMI:
+    Type: String
+  Environment:
+    Type: String
+  Region:
+    Type: String
+  KeyName:
+    Type: String
+
+Resources:
+  NagiosInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LinuxAMI
+      InstanceType: t3.small
+      KeyName: !Ref KeyName
+      Tags:
+      - Key: Environment
+        Value: Production
+      - Key: Name
+        Value: !Sub EC2-${Environment}-${Region}-NAGIOS
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: '30'
+            DeleteOnTermination: 'true'
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref SecurityGroup
+          SubnetId: !Ref SubnetID
+
+Outputs:
+  PublicIp:
+    Description: Server Public IP
+    Value: !GetAtt NagiosInstance.PublicIp
+    Export:
+      Name: Nagios-PublicIp
+  PrivateIp:
+    Description: Server Private IP
+    Value: !GetAtt NagiosInstance.PrivateIp
+    Export:
+      Name: Nagios-PrivateIp
+  InstanceID:
+    Description: The Instance ID
+    Value: !Ref NagiosInstance
+    Export:
+      Name: Nagios-InstanceID
